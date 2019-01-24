@@ -1,3 +1,96 @@
+# DevOps Coding Test
+
+## Create the environment
+
+The first step is to create the hole environment:
+* VPC
+* Public Subnets
+* IGW
+* LoadBalancer
+* Target Group
+* Docker Cluster
+
+The `CloudFormation/main_infra.json` file is a CloudFormation Template that will create all for you.
+
+You have to login to the AWS console with the user y and pass that Veronica sended to you.
+
+Then you have deploy that template in CloudFormation.
+
+### * Make it Parameters
+* Stack Name: whathever you want
+* Key: devop-challenge
+* For the rest, just leave default
+
+
+**Note**: before pushing the `Create` button, you have to check:
+* `I acknowledge that AWS CloudFormation might create IAM resources` 
+
+
+## Output values
+
+When the CloudFormation task ends, you have to take the two values that will show up on the `Output` tab.
+
+You have to use those values with the script `ECS/hello-service.json`, to replace some strings. It is clear when you see the file.
+
+
+## Create Task and Service
+
+We have already the environment, it is time to run some services.
+
+### Task
+
+You have to run:
+
+```bash
+aws --region us-east-1  ecs register-task-definition --cli-input-json file://ECS/hello-task.json
+
+```
+
+That will create the task definition for you, it is just a docker with nginx inside.
+
+### Service
+
+Once you have modified the file `hello-service.json` with the output from `CloudFormation`, you have to run:
+
+```bash
+aws --region us-east-1  ecs create-service  --cli-input-json file://ECS/hello-service.json
+```
+
+# Done!
+
+You have to look for the ApplicationLoadBalancer in the AWS console, take the url and put it on the browser.
+
+You will see the hello from Nginx :-)
+
+
+## HealthCheck
+
+I made a healthcheck that shows `OK` and `FAIL` on a webpage. It's a simple ruby - rack app.
+I've put it in a Docker, and you can configure it throught the `docker-compose.yml` file.
+
+Edit the `docker-compose.yml` file, for the parameters:
+* REFRESH_TIME: time in seconds for reload the browser
+* WEBSITE: url to check.
+
+Then you have to run:
+```bash
+docker-compose up
+```
+
+and connect to: `http://localhost:8080`
+
+
+## Notes
+* I know that my solution it is not so cloud agnostic, but AWS is the Cloud I know the most.
+* This solution use diferent AZ to provide high availability. By default each server is created in a different AZ, and the creation of containers acurs in the same way.
+* This solution lacks of secutiry for the clusters servers, because they are on a public subnet. In a more sofisticated solution, I would create private subnets with NAT, and no public IP for the cluster.
+* I don't know terraform, but I'm a fast learner.
+
+
+------------------------------------------------------------------------------------------------------------------------------
+
+
+
 DevOps Coding Test
 ==================
 

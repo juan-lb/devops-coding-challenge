@@ -1,0 +1,14 @@
+{
+    "cluster": "REPLACE HERE CLUSTER NAME",  <=====================
+    "serviceName": "DevopChallengeService",
+    "taskDefinition": "DevopChallengeTask",
+    "loadBalancers": [
+        {
+            "containerName": "hello",
+            "containerPort": 80,
+            "targetGroupArn": "REPLACE HERE TARGET GROUP ARN"  <=====================
+        }
+    ],
+    "desiredCount": 2,
+    "role": "arn:aws:iam::731947005352:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+}

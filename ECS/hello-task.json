@@ -1,0 +1,20 @@
+{
+    "containerDefinitions": [
+      {
+        "name": "hello",
+        "image": "nginxdemos/hello:latest",
+        "cpu": 10,
+        "memory": 10,
+        "portMappings": [
+            {
+              "hostPort": 0,
+              "protocol": "tcp",
+              "containerPort": 80
+            }
+          ],
+          "essential": true
+
+      }
+    ],
+    "family": "DevopChallengeTask"
+  }

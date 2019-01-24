@@ -1,0 +1,11 @@
+version: '2'
+services:
+  app:   
+    build: .
+    tty: true
+    stdin_open: true 
+    environment:
+      REFRESH_TIME: 2
+      WEBSITE: http://www.google.com/    
+    ports:
+     - "8080:8080"

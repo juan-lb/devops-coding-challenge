@@ -1,0 +1,746 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Cloudformation for devop Challenge, one VPC, 2 public subnets on two differnte AZ. Security Groups, ALB, Autoscaling Grop, Target Group",
+  "Parameters": {
+    "VPCCIDR": {
+      "Type": "String",
+      "Description": "IP Address range for the VPN connected VPC",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "10.10.0.0/16",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "PublicSubnetCIDR1": {
+      "Type": "String",
+      "Description": "IP Address range for the VPN connected public Subnet 1",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "10.10.10.0/24",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "PublicSubnetCIDR2": {
+      "Type": "String",
+      "Description": "IP Address range for the VPN connected public Subnet 2",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "10.10.20.0/24",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "KeyName": {
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the ECS instances"
+    },
+
+    "DesiredCapacity": {
+      "Type": "Number",
+      "Default": "2",
+      "Description": "Number of instances to launch in your ECS cluster"
+    },
+    "AsgMaxSize": {
+      "Type": "Number",
+      "Default": "2",
+      "Description": "Maximum number of instances that can be launched in your ECS cluster"
+    },
+    "InstanceType": {
+      "Description": "The EC2 instance type",
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues": [
+        "t2.micro"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    }
+  },
+  "Mappings": {
+    "AWSRegionToAMI": {
+      "us-east-1": {
+        "AMIID": "ami-5253c32d"
+      },
+      "us-west-2": {
+        "AMIID": "ami-1d668865"
+      }
+    }
+  },
+  "Resources": {
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Ref": "VPCCIDR"
+        },
+        "EnableDnsSupport": "true",
+        "EnableDnsHostnames": "true",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge-VPC"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          }
+        ]
+      }
+    },
+    "PublicSubnet1": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "PublicSubnetCIDR1"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "0",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge-public-1"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          },
+          {
+            "Key": "Network",
+            "Value": "Public"
+          }
+        ]
+      }
+    },
+    "PublicSubnet2": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Ref": "PublicSubnetCIDR2"
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "1",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge-public-2"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          },
+          {
+            "Key": "Network",
+            "Value": "Public"
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge-IGW"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          },
+          {
+            "Key": "Network",
+            "Value": "Public"
+          }
+        ]
+      }
+    },
+    "GatewayToInternet": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicSubnetRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge-public-routing"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          },
+          {
+            "Key": "Network",
+            "Value": "Public"
+          }
+        ]
+      }
+    },
+    "PublicSubnetRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "GatewayToInternet",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicSubnetRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicSubnetRouteTableAssociation1": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet1"
+        },
+        "RouteTableId": {
+          "Ref": "PublicSubnetRouteTable"
+        }
+      }
+    },
+    "PublicSubnetRouteTableAssociation2": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet2"
+        },
+        "RouteTableId": {
+          "Ref": "PublicSubnetRouteTable"
+        }
+      }
+    },
+    "EIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PrivateSubnetRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          },
+          {
+            "Key": "Network",
+            "Value": "Private"
+          }
+        ]
+      }
+    },
+    "AppServerSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable access to the production server from the bastion host",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "1024",
+            "ToPort": "65535",
+            "SourceSecurityGroupId": {
+              "Ref": "ALBSG"
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge-app-SG"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          }
+        ]
+      }
+    },
+    "ALB": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Scheme": "internet-facing",
+        "Subnets": [
+          {
+            "Ref": "PublicSubnet1"
+          },
+          {
+            "Ref": "PublicSubnet2"
+          }
+        ],
+        "LoadBalancerAttributes": [
+          {
+            "Key": "idle_timeout.timeout_seconds",
+            "Value": "50"
+          }
+        ],
+        "SecurityGroups": [
+          {
+            "Ref": "ALBSG"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          }
+        ]
+      }
+    },
+    "Listener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "TargetGroup"
+            }
+          }
+        ],
+        "LoadBalancerArn": {
+          "Ref": "ALB"
+        },
+        "Port": "80",
+        "Protocol": "HTTP"
+      }
+    },
+    "ALBSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable access to ALB from Internet",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "devop-challenge-ALBSG"
+          },
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          }
+        ]
+      }
+    },
+    "ECSCluster": {
+      "Type": "AWS::ECS::Cluster",
+      "Metadata": {
+        "AWS::CloudFormation::Designer": {
+          "id": "14de148d-c95d-4f5f-bcf7-6e123d54844b"
+        }
+      }
+    },
+    "TargetGroup": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Matcher": {
+          "HttpCode": "200"
+        },
+        "Name": "HelloTG",
+        "Port": 80,
+        "Protocol": "HTTP",
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "ECSAutoScalingGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "TargetGroupARNs": [
+          {
+            "Ref": "TargetGroup"
+          }
+        ],
+        "VPCZoneIdentifier": [
+          {
+            "Ref": "PublicSubnet1"
+          },
+          {
+            "Ref": "PublicSubnet2"
+          }
+        ],
+        "LaunchConfigurationName": {
+          "Ref": "ContainerInstances"
+        },
+        "MinSize": "1",
+        "MaxSize": {
+          "Ref": "AsgMaxSize"
+        },
+        "DesiredCapacity": {
+          "Ref": "DesiredCapacity"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "ECSClusterMachine",
+            "PropagateAtLaunch": "true"
+          }
+        ]
+      },
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Timeout": "PT15M"
+        }
+      },
+      "UpdatePolicy": {
+        "AutoScalingRollingUpdate": {
+          "MinInstancesInService": "1",
+          "MaxBatchSize": "1",
+          "PauseTime": "PT15M",
+          "WaitOnResourceSignals": "true"
+        }
+      }
+    },
+    "ApagarServers": {
+      "Type": "AWS::AutoScaling::ScheduledAction",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "ECSAutoScalingGroup"
+        },
+        "DesiredCapacity": "0",
+        "MaxSize": "0",
+        "MinSize": "0",
+        "Recurrence": "30 22 * * *"
+      }
+    },
+    "PrenderServers": {
+      "Type": "AWS::AutoScaling::ScheduledAction",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "ECSAutoScalingGroup"
+        },
+        "DesiredCapacity": "2",
+        "MaxSize": "2",
+        "MinSize": "2",
+        "Recurrence": "30 10 * * *"
+      }
+    },
+    "ApagarServersSabado": {
+      "Type": "AWS::AutoScaling::ScheduledAction",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "ECSAutoScalingGroup"
+        },
+        "DesiredCapacity": "0",
+        "MaxSize": "0",
+        "MinSize": "0",
+        "Recurrence": "0 11 * * Sat"
+      }
+    },
+    "ApagarServersDomingo": {
+      "Type": "AWS::AutoScaling::ScheduledAction",
+      "Properties": {
+        "AutoScalingGroupName": {
+          "Ref": "ECSAutoScalingGroup"
+        },
+        "DesiredCapacity": "0",
+        "MaxSize": "0",
+        "MinSize": "0",
+        "Recurrence": "0 11 * * Sun"
+      }
+    },
+    "ContainerInstances": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "DependsOn": [
+        "ECSCluster"
+      ],
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "Install": [
+              "Install"
+            ]
+          },
+          "Install": {
+            "packages": {
+              "yum": {
+                "nfs-utils": [],
+                "python27": []
+              }
+            },
+            "files": {
+              "/etc/cfn/cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                },
+                "mode": "000400",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.ContainerInstances.Metadata.AWS::CloudFormation::Init\n",
+                      "action=/opt/aws/bin/cfn-init -v ",
+                      "         --stack ",
+                      {
+                        "Ref": "AWS::StackName"
+                      },
+                      "         --resource ContainerInstances ",
+                      "         --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n",
+                      "runas=root\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/cfn/cfn-hup.conf",
+                    "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "AWS::CloudFormation::Designer": {
+          "id": "d86a3e51-ef74-4f2a-9591-8c547b7bee6c"
+        }
+      },
+      "Properties": {
+        "AssociatePublicIpAddress": "True",
+        "ImageId": {
+          "Fn::FindInMap": [
+            "AWSRegionToAMI",
+            {
+              "Ref": "AWS::Region"
+            },
+            "AMIID"
+          ]
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "EC2InstanceProfile"
+        },
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "AppServerSG"
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash\n",
+                "cp /usr/share/zoneinfo/America/Buenos_Aires /etc/localtime\n",
+                "echo ECS_CLUSTER=",
+                {
+                  "Ref": "ECSCluster"
+                },
+                " >> /etc/ecs/ecs.config\n",
+                "yum install -y aws-cfn-bootstrap\n",
+                "yum -y install jq\n",
+                "easy_install pip\n",
+                "pip install awscli\n",
+                "aws configure set default.region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "/opt/aws/bin/cfn-init",
+                "         --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                " ",
+                "         --resource ContainerInstances ",
+                "         --configsets Install ",
+                "         --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "PATH=$PATH:/usr/local/bin\n",
+                "yum update\n",
+                "EC2_AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`\n",
+                "EC2_REGION=",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "docker ps\n",
+                "service docker stop\n",
+                "service docker start\n",
+                "/opt/aws/bin/cfn-signal -e $? ",
+                "         --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "         --resource ECSAutoScalingGroup ",
+                "         --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "EC2Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+        ]
+      }
+    },
+    "EC2InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "EC2Role"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "TargetGroup": {
+      "Value": {
+        "Ref": "TargetGroup"
+      }
+    },
+    "ECSCluster": {
+      "Value": {
+        "Ref": "ECSCluster"
+      }
+    }
+  }
+}
